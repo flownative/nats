@@ -1,0 +1,19 @@
+{
+    "name": "flownative/nats",
+    "type": "neos-package",
+    "description": "A NATS client for PHP.",
+    "license": "MIT",
+    "require": {
+        "php": "^7.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Flownative\\Nats\\": "Classes"
+        }
+    },
+    "extra": {
+        "neos": {
+            "package-key": "Flownative.Nats"
+        }
+    }
+}
