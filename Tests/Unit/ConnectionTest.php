@@ -22,18 +22,30 @@ use PHPUnit\Framework\TestCase;
 class ConnectionTest extends TestCase
 {
     /**
-     * @test
+     * @var ConnectionOptions
+     */
+    private $defaultOptions;
+
+    /**
      * @throws
      */
-    public function constructorConnectsWithServer(): void
+    public function setUp()
     {
-        $options = new ConnectionOptions([
+        parent::setUp();
+        $this->defaultOptions = new ConnectionOptions([
             'username' => 'user',
             'password' => 'password',
             'debug' => false,
             'version' => '1.0.0'
         ]);
+    }
 
+    /**
+     * @test
+     * @throws
+     */
+    public function constructorConnectsWithServer(): void
+    {
         $mockSocket = $this->mockSocket();
         $mockSocket->expects($this->exactly(2))->method('receive')
             ->willReturnOnConsecutiveCalls(
@@ -46,7 +58,7 @@ class ConnectionTest extends TestCase
                 ['PING']
             );
 
-        new Connection('nats://localhost:4222', $options, $mockSocket);
+        new Connection('nats://localhost:4222', $this->defaultOptions, $mockSocket);
     }
 
     /**
@@ -55,13 +67,6 @@ class ConnectionTest extends TestCase
      */
     public function connectAuthenticatesWithUsernameAndPasswordIfRequired(): void
     {
-        $options = new ConnectionOptions([
-            'username' => 'user',
-            'password' => 'password',
-            'debug' => false,
-            'version' => '1.0.0'
-        ]);
-
         $mockSocket = $this->mockSocket();
         $mockSocket->expects($this->exactly(2))->method('receive')
             ->willReturnOnConsecutiveCalls(
@@ -74,7 +79,7 @@ class ConnectionTest extends TestCase
                 ['CONNECT {"lang":"php","version":"1.0.0","verbose":false,"pedantic":false,"user":"user","pass":"password"}'],
                 ['PING']
             );
-        new Connection('nats://localhost:4222', $options, $mockSocket);
+        new Connection('nats://localhost:4222', $this->defaultOptions, $mockSocket);
     }
 
     /**
@@ -102,6 +107,56 @@ class ConnectionTest extends TestCase
             ->willThrowException(new ConnectionException(sprintf('nats: sending data failed: %s', 'fwrite() ...'), 1553534850));
 
         new Connection('nats://localhost:4222', $options, $mockSocket);
+    }
+
+    /**
+     * @test
+     * @throws
+     */
+    public function publish(): void
+    {
+        $mockSocket = $this->mockSocket();
+        $mockSocket->expects($this->exactly(2))->method('receive')
+            ->willReturnOnConsecutiveCalls(
+                new Response('INFO {"server_id":"7rCY5EiVoJnVPso7zhEfkI","version":"1.4.1","proto":1,"git_commit":"3e64f0b","go":"go1.11.5","host":"0.0.0.0","port":4222,"max_payload":1048576,"client_id":35}'),
+                new Response('PONG')
+            );
+        $mockSocket->expects($this->exactly(3))->method('send')
+            ->withConsecutive(
+                ['CONNECT {"lang":"php","version":"1.0.0","verbose":false,"pedantic":false,"user":"user","pass":"password"}'],
+                ['PING'],
+                ["PUB FOO 27 11\r\nHello World"]
+            );
+
+        $connection = new Connection('nats://localhost:4222', $this->defaultOptions, $mockSocket);
+        $connection->publish('FOO', 'Hello World', 27);
+
+    }
+
+    /**
+     * @test
+     * @throws
+     */
+    public function subscribe(): void
+    {
+        $mockSocket = $this->mockSocket();
+        $mockSocket->expects($this->exactly(2))->method('receive')
+            ->willReturnOnConsecutiveCalls(
+                new Response('INFO {"server_id":"7rCY5EiVoJnVPso7zhEfkI","version":"1.4.1","proto":1,"git_commit":"3e64f0b","go":"go1.11.5","host":"0.0.0.0","port":4222,"max_payload":1048576,"client_id":35}'),
+                new Response('PONG')
+            );
+        $mockSocket->expects($this->exactly(3))->method('send')
+            ->withConsecutive(
+                ['CONNECT {"lang":"php","version":"1.0.0","verbose":false,"pedantic":false,"user":"user","pass":"password"}'],
+                ['PING'],
+                ['SUB foo PzioLnvdR4cXQfrIitw6']
+            );
+
+        mt_srand(1);
+        $connection = new Connection('nats://localhost:4222', $this->defaultOptions, $mockSocket);
+        $connection->subscribe('foo', function($message) {
+            return $message->getData();
+        });
     }
 
     /**

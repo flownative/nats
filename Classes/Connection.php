@@ -37,9 +37,19 @@ final class Connection
     private $serverInfo;
 
     /**
+     * @var array
+     */
+    private $subscriptions = [];
+
+    /**
      * @var int
      */
     private $pings = 0;
+
+    /**
+     * @var int
+     */
+    private $pubs = 0;
 
     /**
      * @param Uri|string $connectionUri
@@ -103,6 +113,36 @@ final class Connection
     }
 
     /**
+     * @param string $subject
+     * @param string|null $payload
+     * @param string|null $inbox
+     * @throws ConnectionException
+     */
+    public function publish(string $subject, string $payload = null, string $inbox = null): void
+    {
+        $message = 'PUB ' . $subject . ($inbox !== null ? ' ' . $inbox : '');
+        $message .= ' ' . strlen($payload);
+        $this->streamSocketConnection->send($message . "\r\n" . $payload);
+        ++$this->pubs;
+
+    }
+
+    /**
+     * @param string $subject
+     * @param \Closure $callback
+     * @return string The subscription identifier
+     * @throws \Exception
+     */
+    public function subscribe(string $subject, \Closure $callback): string
+    {
+        $subscriptionId = $this->generateRandomString(20);
+        $message = 'SUB ' . $subject . ' ' . $subscriptionId;
+        $this->streamSocketConnection->send($message);
+        $this->subscriptions[$subscriptionId] = $callback;
+        return $subscriptionId;
+    }
+
+    /**
      * @return string
      */
     public function getClientVersion(): string
@@ -146,5 +186,22 @@ final class Connection
         }
         return $connectionOptions;
     }
+
+    /**
+     * @param int $length
+     * @return string Random string.
+     * @throws \Exception
+     */
+    private function generateRandomString(int $length): string
+    {
+        $alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        $max = strlen($alphabet) - 1;
+        $string = '';
+        for ($i = 0; $i < $length; $i++) {
+            $string .= $alphabet[mt_rand(0, $max)];
+        }
+        return $string;
+    }
+
 }
 
