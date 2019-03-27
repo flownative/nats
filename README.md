@@ -20,6 +20,7 @@ In PHP, open a new connection with
 ```php
 use Flownative\Nats\Connection;
 
+// Connect to a server
 $connection = new Connection(
     'nats://localhost:4222',
     [
@@ -28,6 +29,14 @@ $connection = new Connection(
         'debug' => true
     ]
 );
+
+// Simple publisher
+$connection->publish('foo', 'Hello World');
+
+// Simple asynchronous subscriber
+$connection->subscribe('foo', function($message) {
+    printf("Received a message: %s\n", $message->getData());
+});
 
 ```
 
