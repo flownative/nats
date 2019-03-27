@@ -11,10 +11,13 @@ namespace Flownative\Nats;
  * source code.
  */
 
+use GuzzleHttp\Psr7\Uri;
+use PackageVersions\Versions;
+
 final class Connection
 {
     /**
-     * @var string
+     * @var Uri
      */
     private $connectionUri;
 
@@ -24,21 +27,9 @@ final class Connection
     private $connectionOptions;
 
     /**
-     * The timeout in microseconds
-     *
-     * @var int
+     * @var StreamSocketConnection
      */
-    private $timeout;
-
-    /**
-     * @var bool
-     */
-    private $debug = false;
-
-    /**
-     * @var resource
-     */
-    private $streamSocket;
+    private $streamSocketConnection;
 
     /**
      * @var ServerInfo
@@ -46,25 +37,26 @@ final class Connection
     private $serverInfo;
 
     /**
-     * @param string $connectionUri
+     * @var int
+     */
+    private $pings = 0;
+
+    /**
+     * @param Uri|string $connectionUri
      * @param ConnectionOptions|array|null $connectionOptions
+     * @param StreamSocketConnection|null $streamSocketConnection
      * @throws ConfigurationException
      * @throws ConnectionException
      */
-    public function __construct(string $connectionUri, $connectionOptions = null)
+    public function __construct($connectionUri, $connectionOptions = null, StreamSocketConnection $streamSocketConnection = null)
     {
-        if (!$connectionOptions instanceof ConnectionOptions) {
-            if ($connectionOptions === null) {
-                $connectionOptions = new ConnectionOptions([]);
-            } elseif(is_array($connectionOptions)) {
-                $connectionOptions = new ConnectionOptions($connectionOptions);
-            } else {
-                throw new \InvalidArgumentException(sprintf('Connection options must be of type array or %s, %s given.', ConnectionOptions::class, gettype($connectionOptions)));
-            }
-        }
-        $this->connectionUri = $connectionUri;
-        $this->connectionOptions = $connectionOptions;
+        $this->connectionUri = $this->initializeConnectionUri($connectionUri);
+        $this->connectionOptions = $this->initializeConnectionOptions($connectionOptions);
+        $this->streamSocketConnection = $streamSocketConnection ?? new StreamSocketConnection($this->connectionUri, $this->connectionOptions);
+
+        printf($this->connectionOptions->isDebug() ? " 🚀  Connecting with server via %s ...\n" : '', $connectionUri);
         $this->connect();
+        $this->ping();
     }
 
     /**
@@ -72,108 +64,87 @@ final class Connection
      */
     private function connect(): void
     {
-        $this->streamSocket = $this->openStream($this->connectionUri, $this->connectionOptions->getTimeout());
-
-        $message = 'CONNECT ' . $this->connectionOptions->asJson();
-        $this->send($message);
-        $response = $this->receive();
-        if ($response->isError()) {
-            throw new ConnectionException(sprintf('Failed connecting to NATS server at %s: %s', $this->connectionUri, $response->getPayload()), 1553582009);
+        try {
+            $this->streamSocketConnection->send('CONNECT ' . $this->connectionOptions->asJson());
+        } catch (ConnectionException $sendConnectionException) {
+            // Error handling for unexpected errors, such as network failures or dropped connections:
+            try {
+                $exception = $sendConnectionException;
+                $response = $this->streamSocketConnection->receive();
+                if ($response->isError()) {
+                    $exception = new ConnectionException(sprintf('nats: CONNECT failed with message %s', $response->getErrorMessage()), 1553677975);
+                }
+            } catch (ConnectionException $receiveConnectionException) {
+            }
+            throw $exception;
         }
 
-        $this->serverInfo = ServerInfo::fromResponse($response);
-
-#        \Neos\Flow\var_dump($this->serverInfo);
-//        $this->ping();
-//        $pingResponse = $this->receive();
-
-//        if ($this->isErrorResponse($pingResponse) === true) {
-//            throw Exception::forFailedPing($pingResponse);
-//        }
+        $connectResponse = $this->streamSocketConnection->receive();
+        if ($connectResponse->isError()) {
+            throw new ConnectionException(sprintf('nats: CONNECT failed with message %s', $connectResponse->getErrorMessage()), 1553708645);
+        }
+        $this->serverInfo = ServerInfo::fromResponse($connectResponse);
     }
 
     /**
-     * @param string $payload
+     * Sends PING message
+     *
      * @return void
      * @throws ConnectionException
      */
-    private function send(string $payload): void
+    public function ping(): void
     {
-        $message = $payload . "\r\n";
-        $length = strlen($message);
-        while (true) {
-            try {
-                $bytesSent = fwrite($this->streamSocket, $message);
-            } catch (\Throwable $throwable) {
-                throw new ConnectionException(sprintf('Failed sending data to NATS server at %s:  %s', $this->connectionUri, $throwable->getMessage()), 1553534850);
-            }
-            if ($bytesSent === false) {
-                throw new ConnectionException(sprintf('Failed sending data to NATS server at %s.', $this->connectionUri), 1553533564);
-            }
-            if ($bytesSent === 0) {
-                throw new ConnectionException(sprintf('Failed sending data to NATS server at %s: broken pipe or lost connection.', $this->connectionUri), 1553533614);
-            }
-            if ($length -= $bytesSent > 0) {
-                $message = substr($message, 0 - $length);
+        $this->streamSocketConnection->send('PING');
+        $pingResponse = $this->streamSocketConnection->receive();
+        if ($pingResponse->isError()) {
+            throw new ConnectionException(sprintf('nats: PING failed with message %s', $pingResponse->getErrorMessage()), 1553681058);
+        }
+        ++$this->pings;
+    }
+
+    /**
+     * @return string
+     */
+    public function getClientVersion(): string
+    {
+        return Versions::getVersion('flownative/nats');
+    }
+
+    /**
+     * @param $connectionUri
+     * @return Uri
+     */
+    private function initializeConnectionUri($connectionUri): Uri
+    {
+        if ($connectionUri instanceof Uri) {
+            return $connectionUri;
+        }
+        if (is_string($connectionUri)) {
+            return new Uri($connectionUri);
+        }
+        throw new \InvalidArgumentException(sprintf('nats: connectionUri must be of type string or %s, %s given', Uri::class, gettype($connectionUri)));
+    }
+
+    /**
+     * @param ConnectionOptions|array|null $connectionOptions
+     * @return ConnectionOptions
+     * @throws ConfigurationException
+     */
+    private function initializeConnectionOptions($connectionOptions): ConnectionOptions
+    {
+        if (!$connectionOptions instanceof ConnectionOptions) {
+            if ($connectionOptions === null) {
+                $connectionOptions = new ConnectionOptions([]);
+            } elseif (is_array($connectionOptions)) {
+                $connectionOptions = new ConnectionOptions($connectionOptions);
             } else {
-                break;
+                throw new \InvalidArgumentException(sprintf('nats: connectionOptions must be of type array or %s, %s given', ConnectionOptions::class, gettype($connectionOptions)));
             }
         }
-
-        if ($this->connectionOptions->isDebug()) {
-            printf('>>>> %s', $message);
+        if ($connectionOptions->getVersion() === null) {
+            $connectionOptions->setVersion($this->getClientVersion());
         }
-    }
-
-    /**
-     * @param integer $length Number of bytes to receive
-     * @return Response
-     */
-    private function receive($length = 0): Response
-    {
-        if ($length > 0) {
-            $bytesToRead = $this->connectionOptions->getChunkSize();
-            $line = null;
-            $receivedBytes = 0;
-            while ($receivedBytes < $length) {
-                $bytesLeft = ($length - $receivedBytes);
-                if ($bytesLeft < $this->connectionOptions->getChunkSize()) {
-                    $bytesToRead = $bytesLeft;
-                }
-
-                $readChunk = fread($this->streamSocket, $bytesToRead);
-                $receivedBytes += strlen($readChunk);
-                $line .= $readChunk;
-            }
-        } else {
-            $line = fgets($this->streamSocket);
-        }
-
-        if ($this->debug) {
-            printf('<<<< %s\r\n', $line);
-        }
-
-        return new Response($line);
-    }
-
-    /**
-     * @param string $uri
-     * @param int $timeout
-     * @return resource
-     * @throws ConnectionException
-     */
-    private function openStream(string $uri, int $timeout)
-    {
-        $stream = stream_socket_client($uri, $errorNumber, $errorMessage, $timeout / 1000, STREAM_CLIENT_CONNECT);
-        if ($stream === false) {
-            throw new ConnectionException(sprintf('Failed connecting to NATS server at %s: %s (%s)', $uri, $errorMessage, $errorNumber), 1553532561);
-        }
-
-        $seconds = floor($timeout / 1000);
-        $microseconds = ($timeout - $seconds) * 1000;
-        stream_set_timeout($stream, $seconds, $microseconds);
-
-        return $stream;
+        return $connectionOptions;
     }
 }
 

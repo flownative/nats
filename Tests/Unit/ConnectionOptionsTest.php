@@ -12,8 +12,9 @@ namespace Flownative\Nats\Tests\Unit;
  */
 
 use Flownative\Nats\ConnectionOptions;
+use PHPUnit\Framework\TestCase;
 
-class ConnectionOptionsTest extends \PHPUnit\Framework\TestCase
+class ConnectionOptionsTest extends TestCase
 {
     /**
      * @return array
@@ -21,30 +22,39 @@ class ConnectionOptionsTest extends \PHPUnit\Framework\TestCase
     public function validOptions(): array
     {
         return [
-            ['username', null],
-            ['password', null],
-            ['token', null],
-            ['pedantic', false],
-            ['verbose', false],
-            ['debug', false],
-            ['timeout', 5],
-            ['reconnect', true],
-            ['chunkSize', 1500]
+            ['username', null, 'getUsername'],
+            ['password', null, 'getPassword'],
+            ['token', null, 'getToken'],
+            ['pedantic', false, 'isPedantic'],
+            ['debug', false, 'isDebug'],
+            ['timeout', 5, 'getTimeout'],
+            ['reconnect', true, 'isReconnect'],
+            ['chunkSize', 1500, 'getChunkSize']
         ];
     }
 
     /**
      * @param $name
      * @param $value
+     * @param $getterName
      * @throws
      * @test
      * @dataProvider validOptions()
      */
-    public function validOptionsCanBeSet($name, $value): void
+    public function validOptionsCanBeSetAndRetrieved($name, $value, $getterName): void
     {
         $options = new ConnectionOptions([$name => $value]);
-        $getterName = 'get' . ucfirst($name);
-        self::assertSame($value, $options->$getterName);
+        self::assertSame($value, $options->$getterName());
+    }
+
+    /**
+     * @test
+     * @expectedException \Flownative\Nats\ConfigurationException
+     * @throws
+     */
+    public function invalidOptionNameIsRejected(): void
+    {
+        new ConnectionOptions(['foo' => 'bar']);
     }
 
 }

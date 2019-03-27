@@ -39,7 +39,21 @@ final class Response
      */
     public function isError(): bool
     {
-        return strpos($this->payload, '-ERR') === 0;
+        return empty($this->payload) || strpos($this->payload, '-ERR') === 0;
+    }
+
+    /**
+     * @return string|null
+     */
+    public function getErrorMessage(): ?string
+    {
+        if (empty($this->payload)) {
+            return 'empty response';
+        }
+        if (strpos($this->payload, '-ERR') === 0) {
+            return strtolower(substr($this->payload, 5));
+        }
+        return null;
     }
 
     /**
@@ -50,4 +64,3 @@ final class Response
         return $this->payload;
     }
 }
-

@@ -14,23 +14,30 @@ namespace Flownative\Nats;
 final class ConnectionOptions
 {
     /**
-     * Username for authentication by user
+     * Version of this client
      *
      * @var string
+     */
+    private $version;
+
+    /**
+     * Username for authentication by user
+     *
+     * @var string|null
      */
     private $username = null;
 
     /**
      * Password for authentication by user
      *
-     * @var string
+     * @var string|null
      */
     private $password = null;
 
     /**
      * Token for authentication by token
      *
-     * @var string
+     * @var string|null
      */
     private $token = null;
 
@@ -42,14 +49,11 @@ final class ConnectionOptions
     /**
      * @var bool
      */
-    private $verbose = false;
-
-    /**
-     * @var bool
-     */
     private $debug = false;
 
     /**
+     * Timeout in seconds
+     *
      * @var int
      */
     private $timeout;
@@ -87,47 +91,63 @@ final class ConnectionOptions
     /**
      * @return string
      */
-    public function getUsername(): string
+    public function getVersion(): ?string
+    {
+        return $this->version;
+    }
+
+    /**
+     * @param string $version
+     */
+    public function setVersion(string $version): void
+    {
+        $this->version = $version;
+    }
+
+    /**
+     * @return string|null
+     */
+    public function getUsername(): ?string
     {
         return $this->username;
     }
 
     /**
-     * @param string $username
+     * @param string|null $username
      */
-    public function setUsername(string $username): void
+    public function setUsername(?string $username): void
     {
         $this->username = $username;
     }
 
     /**
-     * @return string
+     * @return string|null
      */
-    public function getPassword(): string
+    public function getPassword(): ?string
     {
         return $this->password;
     }
 
     /**
-     * @param string $password
+     * @param string|null $password
      */
-    public function setPassword(string $password): void
+    public function setPassword(?string $password): void
     {
         $this->password = $password;
     }
 
     /**
-     * @return string
+     * @return string|null
      */
-    public function getToken(): string
+    public function getToken(): ?string
     {
         return $this->token;
     }
 
     /**
-     * @param string $token
+     * @param string|null $token
      */
-    public function setToken(string $token): void
+    public function setToken(?string $token): void
     {
         $this->token = $token;
     }
@@ -146,22 +166,6 @@ final class ConnectionOptions
     public function setPedantic(bool $pedantic): void
     {
         $this->pedantic = $pedantic;
-    }
-
-    /**
-     * @return bool
-     */
-    public function isVerbose(): bool
-    {
-        return $this->verbose;
-    }
-
-    /**
-     * @param bool $verbose
-     */
-    public function setVerbose(bool $verbose): void
-    {
-        $this->verbose = $verbose;
     }
 
     /**
@@ -234,20 +238,21 @@ final class ConnectionOptions
     public function asJson(): string
     {
         $array = [
-            'lang'     => 'PHP',
-            'version'  => '0.1.0',
-            'verbose'  => $this->verbose,
+            'lang' => 'php',
+            'version' => $this->version,
+            'verbose' => false,
             'pedantic' => $this->pedantic,
         ];
-        if (!empty($this->username)) {
+
+        if ($this->username !== null) {
             $array['user'] = $this->username;
         }
 
-        if (!empty($this->password)) {
+        if ($this->password !== null) {
             $array['pass'] = $this->password;
         }
 
-        if (empty($this->token) === false) {
+        if ($this->token !== null) {
             $array['auth_token'] = $this->token;
         }
 
