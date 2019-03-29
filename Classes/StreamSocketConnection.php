@@ -121,4 +121,33 @@ class StreamSocketConnection
         }
         return new Response($line);
     }
+
+    /**
+     * @param int $numberOfMessages
+     * @param \Closure $messageHandler
+     * @return void
+     * @throws ConnectionException
+     */
+    public function wait(int $numberOfMessages, \Closure $messageHandler): void
+    {
+        $messagesCount = 0;
+        $streamInfo  = stream_get_meta_data($this->stream);
+        while (is_resource($this->stream) && !feof($this->stream) && empty($streamInfo['timed_out'])) {
+            $line = $this->receive();
+            if ($line === false) {
+                return;
+            }
+            if (strpos($line, 'PING') === 0) {
+                $this->send('PONG');
+            }
+            if (strpos($line, 'MSG') === 0) {
+                $messagesCount++;
+                $messageHandler($line);
+                if (($numberOfMessages !== 0) && ($messagesCount >= $numberOfMessages)) {
+                    return;
+                }
+            }
+            $streamInfo = stream_get_meta_data($this->stream);
+        }
+    }
 }

@@ -14,7 +14,7 @@ namespace Flownative\Nats;
 use GuzzleHttp\Psr7\Uri;
 use PackageVersions\Versions;
 
-final class Connection
+class Connection
 {
     /**
      * @var Uri
@@ -128,10 +128,29 @@ final class Connection
     }
 
     /**
+     * @param string $subject Message topic
+     * @param string $payload Message data
+     * @param \Closure $callback Closure to be executed as callback.
+     * @return void
+     * @throws ConnectionException
+     */
+    public function request(string $subject, string $payload, \Closure $callback): void
+    {
+        $inbox = uniqid('_INBOX.', true);
+        $sid = $this->subscribe(
+            $inbox,
+            $callback
+        );
+        $this->unsubscribe($sid, 1);
+        $this->publish($subject, $payload, $inbox);
+        $this->wait(1);
+    }
+
+    /**
      * @param string $subject
      * @param \Closure $callback
      * @return string The subscription identifier
-     * @throws \Exception
+     * @throws ConnectionException
      */
     public function subscribe(string $subject, \Closure $callback): string
     {
@@ -140,6 +159,55 @@ final class Connection
         $this->streamSocketConnection->send($message);
         $this->subscriptions[$subscriptionId] = $callback;
         return $subscriptionId;
+    }
+
+    /**
+     * @param string $sid
+     * @param int $numberOfMessages
+     * @return void
+     * @throws ConnectionException
+     */
+    public function unsubscribe(string $sid, int $numberOfMessages = null): void
+    {
+        $message = 'UNSUB ' . $sid . ($numberOfMessages ? ' ' . $numberOfMessages : '');
+        $this->streamSocketConnection->send($message);
+        if ($numberOfMessages === null) {
+            unset($this->subscriptions[$sid]);
+        }
+    }
+
+    /**
+     * @param int $numberOfMessages
+     * @throws ConnectionException
+     */
+    public function wait(int $numberOfMessages): void
+    {
+        $this->streamSocketConnection->wait(
+            $numberOfMessages,
+            function (string $line) {
+                $parts = explode(' ', $line);
+                $subject = null;
+                $payloadLength = trim($parts[3]);
+                $sid = $parts[2];
+
+                if (count($parts) === 5) {
+                    $payloadLength = trim($parts[4]);
+                    $subject = $parts[3];
+                } else if (count($parts) === 4) {
+                    $payloadLength = trim($parts[3]);
+                    $subject = $parts[1];
+                }
+
+                $payload = $this->streamSocketConnection->receive($payloadLength);
+                $message = new Message($subject, $payload, $sid, $this);
+
+                if (!isset($this->subscriptions[$sid])) {
+                    throw new ConnectionException(sprintf('nats: no subscription found with identifier "%s"', $sid), 1553847197);
+                }
+
+                $this->subscriptions[$sid]($message);
+            }
+        );
     }
 
     /**
@@ -190,7 +258,6 @@ final class Connection
     /**
      * @param int $length
      * @return string Random string.
-     * @throws \Exception
      */
     private function generateRandomString(int $length): string
     {

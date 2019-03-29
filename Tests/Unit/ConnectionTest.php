@@ -15,6 +15,7 @@ use Flownative\Nats\ConfigurationException;
 use Flownative\Nats\Connection;
 use Flownative\Nats\ConnectionException;
 use Flownative\Nats\ConnectionOptions;
+use Flownative\Nats\Message;
 use Flownative\Nats\Response;
 use Flownative\Nats\StreamSocketConnection;
 use PHPUnit\Framework\TestCase;
@@ -154,9 +155,7 @@ class ConnectionTest extends TestCase
 
         mt_srand(1);
         $connection = new Connection('nats://localhost:4222', $this->defaultOptions, $mockSocket);
-        $connection->subscribe('foo', function($message) {
-            return $message->getData();
-        });
+        $connection->subscribe('foo', function(){});
     }
 
     /**
