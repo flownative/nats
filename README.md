@@ -21,7 +21,7 @@ In PHP, open a new connection with
 use Flownative\Nats\Connection;
 
 // Connect to a server
-$connection = new Connection(
+$nats = new Connection(
     'nats://localhost:4222',
     [
         'username' => 'nats',
@@ -31,16 +31,16 @@ $connection = new Connection(
 );
 
 // Simple publisher
-$connection->publish('foo', 'Hello World');
+$nats->publish('foo', 'Hello World');
 
 // Simple asynchronous subscriber
-$connection->subscribe('foo', function($message) {
-    printf("Received a message: %s\n", $message->getData());
+$nats->subscribe('foo', function($message) {
+    printf("\nReceived a message: %s\n", $message->getBody());
 });
 
 ```
 
-This will open a new socket connection and send a CONNECT and PING to the given NATS server:
+This will open a new socket connection and send a CONNECT and PING to the given NATS server an do a simple PUB / SUB run:
 
 ```
  🚀  Connecting with server via nats://localhost:4222 ...
@@ -48,6 +48,31 @@ This will open a new socket connection and send a CONNECT and PING to the given 
 <<<< INFO {"server_id":"MKfYbh2u0ZDgZrI5B1UaAv","version":"1.4.1","proto":1,"git_commit":"3e64f0b","go":"go1.11.5","host":"0.0.0.0","port":4222,"auth_required":true,"max_payload":1048576,"client_id":69} 
 >>>> PING
 <<<< PONG
+>>>> SUB foo vjxX30gfutwGDBxfLuKR
+>>>> PUB foo 11
+Hello World
+<<<< MSG foo vjxX30gfutwGDBxfLuKR 11
+<<<< Hello World
+Received a message via sid vjxX30gfutwGDBxfLuKR: Hello World
+
+```
+
+You can reply to a message in the subscription handler like so:
+
+```php
+// New subscribe which replies to a given message:
+$nats->subscribe('hello', function (Message $message) {
+    $message->reply(sprintf('Hello, %s!', $message->getBody()));
+});
+
+// Send a request which will be answered by the "hello" subscriber:
+$nats->request(
+    'hello',
+    'Robert',
+    function (Message $message) {
+        printf("Request returned: %s\n", $message->getBody());
+    }
+);
 ```
 
 ## Credits
