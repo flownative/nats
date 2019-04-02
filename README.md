@@ -5,7 +5,7 @@
 
 A PHP implementation of a client for [NATS](https://nats.io/).
 
-Plase note that this package is currently under development and not ready for general use yet. 
+🚧 Please note that this package is currently under development and not ready for general use yet. 
 
 ## Usage
 
@@ -74,6 +74,20 @@ $nats->request(
     }
 );
 ```
+## Development
+
+### Tests
+
+Unit tests can be executed with PhpUnit. A configuration file is included in the main directory. Unit tests are
+self-contained and don't need an actual NATS server running.
+
+### Protocol Buffer schema for NATS Streaming
+Since NATS Streaming uses Google's Protocol Buffers for its messages, we need corresponding PHP classes according
+to the given schema. This is defined by means of a .proto file, which retrieved from the [Go Nats Streaming project
+on Github](https://github.com/nats-io/go-nats-streaming/blob/master/pb/protocol.proto). Based on this file, you can
+automatically create corresponding PHP code using the Protocol Buffers Compiler.
+
+[https://developers.google.com/protocol-buffers/docs/downloads](Download) and install the compiler (called "protoc")
 
 ## Credits
 This package was developed by Robert Lemke as part of his work at [Flownative](https://www.flownative.com). It was written from
